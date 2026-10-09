@@ -1,0 +1,10 @@
+{
+  "name": "opensees",
+  "executable": "OpenSees",
+  "args_template": ["{input}"],
+  "allowed_executables": ["OpenSees", "opensees"],
+  "patterns": [
+    {"name": "warning", "regex": "Warning", "type": "warning"},
+    {"name": "error", "regex": "Error|ERROR", "type": "error"}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "generic",
+  "executable": "echo",
+  "args_template": ["{input}"],
+  "allowed_executables": ["echo", "cat", "ls", "python3"],
+  "patterns": [
+    {"name": "error", "regex": "error|Error|ERROR", "type": "error"},
+    {"name": "warning", "regex": "warning|Warning|WARNING", "type": "warning"}
+  ]
+}

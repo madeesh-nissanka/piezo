@@ -1,0 +1,8 @@
+node_modules/
+*.log
+runs/
+*.zip
+.DS_Store
+Thumbs.db
+coverage/
+.nyc_output/

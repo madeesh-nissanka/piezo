@@ -1,0 +1,38 @@
+{
+  "name": "fenics_python",
+  "executable": "python3",
+  "args_template": [
+    "{input}"
+  ],
+  "allowed_executables": [
+    "python3",
+    "python"
+  ],
+  "patterns": [
+    {
+      "name": "progress",
+      "regex": "step\\s+(?<step>\\d+)\\s+residual\\s+(?<residual>[0-9.eE+\\-]+)",
+      "fields": [
+        "step",
+        "residual"
+      ],
+      "type": "progress"
+    },
+    {
+      "name": "warning",
+      "regex": "warning",
+      "flags": "i",
+      "type": "warning"
+    },
+    {
+      "name": "error",
+      "regex": "Traceback|Error|ERROR|Exception",
+      "type": "error"
+    },
+    {
+      "name": "converged",
+      "regex": "Converged|converged",
+      "type": "converged"
+    }
+  ]
+}

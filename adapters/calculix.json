@@ -1,0 +1,11 @@
+{
+  "name": "calculix",
+  "executable": "ccx",
+  "args_template": ["-i", "{input}"],
+  "allowed_executables": ["ccx", "ccx_2.21"],
+  "patterns": [
+    {"name": "error", "regex": "\\*ERROR", "type": "error"},
+    {"name": "converged", "regex": "Job finished", "type": "converged"},
+    {"name": "progress", "regex": "Increment\\s+\\d+", "fields": ["increment"], "type": "progress"}
+  ]
+}
