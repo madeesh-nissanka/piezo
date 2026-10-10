@@ -6,6 +6,7 @@ abstract: "A small gateway that lets an LLM agent (or any script) launch a comma
 authors:
   - family-names: Nissanka
     given-names: Madeesh P.
+    affiliation: "Université Laval"
 license: MIT
 repository-code: "https://github.com/madeesh-nissanka/piezo"
 version: 0.1.1
