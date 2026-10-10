@@ -1,5 +1,7 @@
 # Piezo: A Protocol-Free Gateway for Agent-Driven Engineering Solvers with Live Log Telemetry
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23274734.svg)](https://doi.org/10.5281/zenodo.23274734)
+
 Piezo is a small gateway that lets an LLM agent (or any script) launch a command-line numerical solver, watch its log as structured events while it runs, and stop it, over plain local HTTP or a JavaScript API, with no MCP server and no SDK.
 
 ## Abstract
