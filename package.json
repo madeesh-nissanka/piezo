@@ -1,6 +1,6 @@
 {
   "name": "piezo",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A protocol-free gateway for agent-driven engineering solvers with live log telemetry",
   "main": "src/index.js",
   "bin": {

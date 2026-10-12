@@ -165,7 +165,7 @@ class McpServer {
         result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "piezo", version: "0.3.0" },
+          serverInfo: { name: "piezo", version: "0.3.1" },
         },
       };
     }

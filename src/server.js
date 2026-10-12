@@ -534,7 +534,7 @@ export function startServer(options = {}) {
           const html = readFileSync(indexPath, "utf8");
           return sendHtml(res, html);
         }
-        return sendHtml(res, `<!DOCTYPE html><html><head><title>Piezo</title></head><body><h1>Piezo v0.3.0</h1><p>Server running. See <a href="/openapi.json">OpenAPI</a>.</p></body></html>`);
+        return sendHtml(res, `<!DOCTYPE html><html><head><title>Piezo</title></head><body><h1>Piezo v0.3.1</h1><p>Server running. See <a href="/openapi.json">OpenAPI</a>.</p></body></html>`);
       }
 
       return sendError(res, PiezoError.notFound("Not found"), requestId);

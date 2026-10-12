@@ -147,7 +147,7 @@ export async function buildManifest(job) {
     solver_version: j.solverVersion ?? null,
     env_subset: envSubset(process.env, j.envKeys),
     artifacts,
-    piezo: { version: "0.3.0", node: process.version },
+    piezo: { version: "0.3.1", node: process.version },
   };
 }
 

@@ -232,7 +232,7 @@ test("buildManifest artifact hashes sorted by relative path", async (t) => {
 test("buildManifest piezo version is fixed string", async (t) => {
   const runDir = tmpDir(t);
   const manifest = await buildManifest({ id: "job_8", runDir });
-  assert.equal(manifest.piezo.version, "0.3.0");
+  assert.equal(manifest.piezo.version, "0.3.1");
   assert.equal(manifest.piezo.node, process.version);
 });
 

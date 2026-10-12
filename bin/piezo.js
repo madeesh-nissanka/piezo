@@ -14,7 +14,7 @@ import { McpServer } from "../src/mcp.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 const EXIT_CODES = {
   SUCCESS: 0,

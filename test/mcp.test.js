@@ -21,7 +21,7 @@ test("MCP server initialize returns capabilities", async () => {
   assert.ok(resp.result);
   assert.equal(resp.result.protocolVersion, "2024-11-05");
   assert.equal(resp.result.serverInfo.name, "piezo");
-  assert.equal(resp.result.serverInfo.version, "0.3.0");
+  assert.equal(resp.result.serverInfo.version, "0.3.1");
 });
 
 test("MCP server tools/list returns all tools", async () => {

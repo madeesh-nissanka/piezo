@@ -15,8 +15,8 @@ test("document declares OpenAPI 3.0.3", () => {
   assert.equal(doc.openapi, "3.0.3");
 });
 
-test("info.version is 0.3.0", () => {
-  assert.equal(doc.info.version, "0.3.0");
+test("info.version is 0.3.1", () => {
+  assert.equal(doc.info.version, "0.3.1");
 });
 
 test("info carries a title and license", () => {

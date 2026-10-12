@@ -1,5 +1,4 @@
 node_modules/
-runs/
-jobs/
+/runs/
+/jobs/
 *.log
-.DS_Store

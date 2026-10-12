@@ -1,4 +1,4 @@
-# Piezo v0.3.0 — MIT License — Copyright (c) Madeesh P. Nissanka
+# Piezo v0.3.1 — MIT License — Copyright (c) Madeesh P. Nissanka
 
 Piezo is a protocol-free gateway for agent-driven engineering solvers with live
 log telemetry. Any agent or script that speaks plain HTTP (or stdio MCP) can

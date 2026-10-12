@@ -4,7 +4,7 @@ title: "Piezo: a protocol-free gateway for agent-driven engineering solvers with
 authors:
   - family-names: Nissanka
     given-names: Madeesh P.
-version: 0.3.0
+version: 0.3.1
 date-released: 2026-10-12
 license: MIT
 type: software

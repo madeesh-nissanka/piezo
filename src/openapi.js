@@ -42,7 +42,7 @@ function buildDocument() {
       title: "Piezo API",
       description:
         "Protocol-free gateway for agent-driven engineering solvers with live log telemetry.",
-      version: "0.3.0",
+      version: "0.3.1",
       license: { name: "MIT", url: "https://opensource.org/licenses/MIT" },
     },
     servers: [
