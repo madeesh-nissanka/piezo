@@ -1,27 +1,37 @@
 {
   "name": "piezo",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "description": "A protocol-free gateway for agent-driven engineering solvers with live log telemetry",
   "main": "src/index.js",
   "bin": {
     "piezo": "bin/piezo.js"
   },
   "scripts": {
-    "test": "node --test tests/piezo.test.js",
-    "serve": "node bin/piezo.js serve",
-    "run": "node bin/piezo.js run"
+    "test": "node --test test/",
+    "smoke": "node --test test/smoke.test.js",
+    "serve": "node bin/piezo.js serve"
   },
   "keywords": [
     "solver",
     "gateway",
     "agent",
     "telemetry",
-    "numerical-analysis"
+    "numerical-analysis",
+    "mcp",
+    "openapi"
   ],
   "author": "Madeesh P. Nissanka",
   "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=18"
-  }
+  },
+  "files": [
+    "bin",
+    "src",
+    "adapters",
+    "web",
+    "docs",
+    "fixtures"
+  ]
 }

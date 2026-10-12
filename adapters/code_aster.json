@@ -1,0 +1,22 @@
+{
+  "_header": "Piezo v0.3.0 - MIT License - Copyright (c) Madeesh P. Nissanka",
+  "name": "code_aster",
+  "executable": "as_run",
+  "args_template": ["--batch", "{input}"],
+  "allowed_executables": ["as_run", "code_aster"],
+  "patterns": [
+    {"name": "error", "regex": "Error|ERROR|FAIL|EXCEPTION", "type": "error"},
+    {"name": "warning", "regex": "Warning|WARNING|ALARM", "type": "warning"},
+    {"name": "converged", "regex": "NORMAL FINISH|CONVERGED|SUCCESS|converged|convergence achieved|solution converged", "type": "converged"},
+    {"name": "diverged", "regex": "diverged|Diverged|DIVERGED|divergence detected|not converged|failed to converge", "type": "diverged"},
+    {"name": "iteration", "regex": "ITERATION\\s+(?<iteration>\\d+)", "fields": ["iteration"], "type": "progress"},
+    {"name": "iteration_residual", "regex": "(?:iteration|iter)\\s+(?<iteration>\\d+)\\s+(?:residual|norm|residu|normInf)\\s*[:=]?\\s*(?<residual>[0-9.eE+\\-]+)", "type": "iteration", "fields": ["iteration", "residual"], "flags": "i"},
+    {"name": "residual", "regex": "RESIDU\\s*=\\s*(?<residual>[0-9.eE+\\-]+)", "fields": ["residual"], "type": "progress"},
+    {"name": "progress", "regex": "progress\\s*[:=]?\\s*(?<progress_pct>\\d+(?:\\.\\d+)?)%", "type": "progress", "fields": ["progress_pct"]},
+    {"name": "progress_alt", "regex": "progress\\s*[:=]\\s*(?<progress_pct>\\d+(?:\\.\\d+)?)\\s*%", "type": "progress", "fields": ["progress_pct"]},
+    {"name": "progress_bracket", "regex": "\\[(?<progress_pct>\\d+(?:\\.\\d+)?)%\\]", "type": "progress", "fields": ["progress_pct"]},
+    {"name": "eta", "regex": "(?:eta|remaining time)\\s*[:=]?\\s*(?<eta_s>\\d+(?:\\.\\d+)?)\\s*s", "type": "info", "fields": ["eta_s"], "flags": "i"},
+    {"name": "eta_hms", "regex": "eta\\s*[:=]?\\s*(?<eta_s>\\d+:\\d+:\\d+)", "type": "info", "fields": ["eta_s"], "flags": "i"}
+  ],
+  "metadata": {"category": "fea", "solver": "Code_Aster", "description": "Code_Aster finite element solver"}
+}

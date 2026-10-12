@@ -1,20 +1,11 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
-type: software
-title: "Piezo: A Protocol-Free Gateway for Agent-Driven Engineering Solvers with Live Log Telemetry"
-abstract: "A small gateway that lets an LLM agent (or any script) launch a command-line numerical solver, watch its log as structured events while it runs, and stop it, over plain local HTTP or a JavaScript API, with no MCP server and no SDK."
+message: "If you use this software, please cite it using these metadata."
+title: "Piezo: a protocol-free gateway for agent-driven engineering solvers with live log telemetry"
 authors:
   - family-names: Nissanka
     given-names: Madeesh P.
-    affiliation: "Université Laval"
-doi: 10.5281/zenodo.23274734
+version: 0.3.0
+date-released: 2026-10-12
 license: MIT
-repository-code: "https://github.com/madeesh-nissanka/piezo"
-version: 0.1.2
-date-released: 2026-10-10
-keywords:
-  - solver
-  - gateway
-  - agent
-  - telemetry
-  - numerical-analysis
+type: software
+abstract: "Piezo is a zero-dependency HTTP gateway that lets AI agents execute CLI engineering solvers with live log telemetry. It provides a declarative adapter system, job management with priority queues, streaming log parsing, and multiple telemetry transports for real-time monitoring."

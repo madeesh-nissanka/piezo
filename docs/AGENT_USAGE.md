@@ -1,172 +1,155 @@
-# Piezo Agent Usage Guide
+# Piezo — Agent Usage Guide (v0.3.0)
 
-This document describes the exact HTTP calls an LLM agent should make to interact with the Piezo gateway, plus a system-prompt snippet for agent authors.
+Piezo is driven over plain HTTP (or stdio MCP). No custom protocol: any agent or
+script that can make an HTTP request and read JSON can run and monitor solver
+jobs. This guide uses the bundled fake solver so every example is reproducible
+without installing any engineering software.
 
-## Quick Start
+- Default bind: `http://127.0.0.1:7421` (localhost only).
+- Optional auth: set `PIEZO_TOKEN` server-side, then send `Authorization: Bearer <token>`.
+- Full machine-readable spec: `GET /openapi.json` (OpenAPI 3.0.3).
+- Errors: every failure returns JSON `{ "error": { "code", "message", "request_id" } }` with a matching HTTP status.
+
+## Start the gateway
 
 ```bash
-# Start the server (in one terminal)
-export PIEZO_PORT=7421
-export PIEZO_ROOT=/path/to/workspace
-node bin/piezo.js serve
-
-# In another terminal, run a job
-curl -X POST http://127.0.0.1:7421/runs \
-  -H "Content-Type: application/json" \
-  -d '{"adapter": "python", "input": "script.py"}'
+node bin/piezo.js serve --port 7421
+# or with a job root and a token:
+PIEZO_ROOT=/tmp/piezo-jobs PIEZO_TOKEN=secret node bin/piezo.js serve
 ```
 
-## HTTP API
+## Core flow: submit → poll/stream → fetch results
 
-### POST /runs
-Start a new solver run.
+### 1. List adapters
 
-**Request:**
+```bash
+curl -s http://127.0.0.1:7421/adapters
+# one adapter (full definition):
+curl -s http://127.0.0.1:7421/adapters/generic_cli
+# validate a custom adapter definition (also works before submit):
+curl -s -X POST http://127.0.0.1:7421/adapters/validate \
+  -H 'content-type: application/json' -d @my_adapter.json
+```
+
+### 2. Submit a job
+
+`POST /jobs` body fields: `adapter` (name or inline adapter object), `input`
+(path handed to the solver verbatim — the solver's working directory is the
+job's isolated run dir `<root>/runs/<job_id>`, so prefer an absolute path or
+one relative to that run dir), plus optional `extra_args`
+(array), `priority` (0–10, default 5), `timeout_s`, `retries`.
+
+```bash
+curl -s -X POST http://127.0.0.1:7421/jobs \
+  -H 'content-type: application/json' \
+  -d '{"adapter":"python_script","input":"/srv/piezo/inputs/consolidation.py","priority":7,"timeout_s":120}'
+```
+
+Returns `201` with the job record:
+
 ```json
-{
-  "adapter": "python" | "generic" | "opensees" | "calculix" | "fenics_python" | { ...adapter object... } | "/path/to/adapter.json",
-  "input": "path/to/input/file",
-  "extra_args": ["--flag", "value"],
-  "cwd": "/path/to/working/dir",
-  "timeout_s": 300
-}
+{ "id": "job_1700000000000_3", "status": "queued",
+  "spec": { "adapter": { "name": "python_script" }, "input": "/srv/piezo/inputs/consolidation.py",
+            "priority": 7, "timeout_s": 120, "retries": 0 },
+  "attempts": 0, "createdAt": 1700000000000 }
 ```
 
-**Response (201):**
-```json
-{ "id": "run_1234567890_abc123" }
+Statuses: `queued`, `running`, `succeeded`, `failed`, `cancelled`, `timeout`.
+
+### 3. Follow live progress
+
+Choose whichever fits your agent best:
+
+```bash
+# snapshot poll (offset replay via since/tail — line numbers, not bytes):
+curl -s "http://127.0.0.1:7421/jobs/$ID/log?since=0&tail=50"      # raw lines
+curl -s "http://127.0.0.1:7421/jobs/$ID/events?since=0"           # parsed events
+curl -s "http://127.0.0.1:7421/jobs/$ID/metrics"                  # rolling metrics snapshot
+
+# Server-Sent Events (use ?format=sse or an Accept: text/event-stream header;
+# the stream endpoint defaults to NDJSON when neither asks for SSE):
+curl -N "http://127.0.0.1:7421/jobs/$ID/stream?format=sse"
+
+# NDJSON stream (one JSON object per line, replay from offset with ?from=):
+curl -N "http://127.0.0.1:7421/jobs/$ID/stream?format=ndjson&from=100"
+
+# long-poll until terminal or timeout:
+curl -s "http://127.0.0.1:7421/jobs/$ID/wait?timeout_ms=30000"
 ```
 
-### GET /runs
-List all runs.
+### 4. Cancel / retry / inspect results
 
-**Response (200):**
-```json
-[
-  { "id": "...", "startTime": 1234567890, "endTime": null, "exitCode": null, "signal": null, "timedOut": false, "cancelled": false, "lineCount": 42 }
-]
+```bash
+curl -s -X POST http://127.0.0.1:7421/jobs/$ID/cancel
+curl -s http://127.0.0.1:7421/jobs/$ID/manifest      # provenance: hashes, command, versions
+curl -s http://127.0.0.1:7421/jobs/$ID/artifacts     # artifact list with sha256
+curl -s -o out.vtk http://127.0.0.1:7421/jobs/$ID/artifacts/results/out.vtk
+curl -s http://127.0.0.1:7421/jobs/$ID/summary       # small JSON summary for agents
 ```
 
-### GET /runs/:id
-Get run status and summary.
+### 5. List / filter jobs (paginated)
 
-**Response (200):**
-```json
-{
-  "id": "...",
-  "startTime": 1234567890,
-  "endTime": 1234567920,
-  "exitCode": 0,
-  "signal": null,
-  "timedOut": false,
-  "cancelled": false,
-  "lineCount": 30
-}
+```bash
+curl -s "http://127.0.0.1:7421/jobs?limit=20&offset=0&status=running"
+# response: { "items": [...], "total": N, "limit": 20, "offset": 0, "next_offset": 20 }
 ```
 
-### GET /runs/:id/log?since=0&tail=50
-Get log lines (last N lines or since line number).
+## Parameter studies
 
-**Response (200):**
-```json
-{ "lines": [{ "lineNo": 1, "text": "step 1 residual 1.0e-03", "stream": "stdout" }, ...] }
+```bash
+curl -s -X POST http://127.0.0.1:7421/studies \
+  -H 'content-type: application/json' \
+  -d '{"template":{"adapter":"python_script","input":"/srv/piezo/inputs/beam_{load}.inp"},
+       "plan":{"type":"grid","factors":{"load":[100,200,300]}}}'
+
+curl -s http://127.0.0.1:7421/studies/$STUDY_ID            # batch status
+curl -s -o table.csv "http://127.0.0.1:7421/studies/$STUDY_ID/export?format=csv"
 ```
 
-### GET /runs/:id/events?since=0
-Get parsed events (progress, warning, error, converged).
+Plan types: `grid` (`factors`: object of arrays), `sweep` (`factor` + `values`), `lhs` (Latin hypercube: `factors` of `{min,max,n}` + integer `seed`). Template placeholders use single braces: `{name}` inside `input` and `extra_args` entries is replaced by the cell value.
 
-**Response (200):**
-```json
-{ "events": [{ "t": 1234567890, "line_no": 1, "type": "progress", "name": "progress", "fields": { "step": "1", "residual": "1.0e-03" }, "text": "step 1 residual 1.0e-03" }, ...] }
+## MCP server (for LLM tool use)
+
+Piezo speaks Model Context Protocol over stdio — your agent runtime spawns it:
+
+```bash
+node bin/piezo.js mcp            # tools: list_adapters, submit_job, job_status, tail_log, cancel_job, get_artifacts
 ```
 
-### POST /runs/:id/cancel
-Cancel a running job (sends SIGTERM, then SIGKILL after 5s).
+## CLI equivalents
 
-**Response (200):**
-```json
-{ "cancelled": true }
+```bash
+node bin/piezo.js run python_script /srv/piezo/inputs/consolidation.py --json
+node bin/piezo.js submit python_script /srv/piezo/inputs/beam.t.inp --priority 7
+node bin/piezo.js status job_xxx --json
+node bin/piezo.js tail job_xxx --since 0 --tail 50
+node bin/piezo.js cancel job_xxx
+node bin/piezo.js adapters validate my_adapter.json
+node bin/piezo.js serve --port 7421
 ```
 
-### GET /health
-Health check.
+Exit codes: `0` success, `1` error, `2` usage, `3` not found, `4` unauthorized, `5` server unreachable.
 
-**Response (200):**
-```json
-{ "status": "ok", "runs": 3 }
+## Minimal Python client
+
+```python
+import requests
+
+BASE = "http://127.0.0.1:7421"
+H = {"content-type": "application/json"}
+
+job = requests.post(f"{BASE}/jobs",
+                    json={"adapter": "python_script", "input": "/srv/piezo/inputs/heat.py"},
+                    headers=H).json()
+
+final = requests.get(f"{BASE}/jobs/{job['id']}/wait", params={"timeout_ms": 60000}).json()
+summary = requests.get(f"{BASE}/jobs/{final['id']}/summary").json()
+assert final["status"] == "succeeded", final
 ```
 
-## Authentication
+## Rules for agents
 
-If `PIEZO_TOKEN` is set, all requests require:
-```
-Authorization: Bearer <token>
-```
-
-## Adapter Objects
-
-Built-in adapters (use by name):
-- `generic`: any allowed executable, basic error/warning patterns
-- `python`: runs `python3 script.py`
-- `opensees`: runs `OpenSees input.tcl`
-- `calculix`: runs `ccx -i input.inp`
-- `fenics_python`: runs `python3 script.py` with FEniCS-style patterns
-
-Custom adapter (inline or file path):
-```json
-{
-  "name": "my_solver",
-  "executable": "my_solver",
-  "args_template": ["-i", "{input}", "-o", "output.dat"],
-  "allowed_executables": ["my_solver"],
-  "patterns": [
-    { "name": "progress", "regex": "Iteration\\s+(\\d+)", "fields": ["iter"], "type": "progress" },
-    { "name": "converged", "regex": "CONVERGED", "type": "converged" },
-    { "name": "error", "regex": "ERROR", "type": "error" }
-  ]
-}
-```
-
-## Agent Session Pattern
-
-```javascript
-// 1. POST a run
-const run = await fetch("http://127.0.0.1:7421/runs", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ adapter: "python", input: "solve.py" })
-}).then(r => r.json());
-
-// 2. Poll events every 1-2 seconds
-let lastLine = 0;
-while (true) {
-  const events = await fetch(`http://127.0.0.1:7421/runs/${run.id}/events?since=${lastLine}`)
-    .then(r => r.json());
-  for (const e of events.events) {
-    // Process event: update UI, check converged, count errors
-    if (e.type === "converged") break;
-    if (e.type === "error") { /* handle failure */ }
-    lastLine = e.line_no;
-  }
-  const status = await fetch(`http://127.0.0.1:7421/runs/${run.id}`).then(r => r.json());
-  if (status.endTime) break;
-  await new Promise(r => setTimeout(r, 1500));
-}
-
-// 3. Read final log tail
-const log = await fetch(`http://127.0.0.1:7421/runs/${run.id}/log?tail=100`).then(r => r.json());
-```
-
-## System Prompt Snippet
-
-> You have access to a local solver gateway called Piezo (http://127.0.0.1:7421). To run a numerical solver:
-> 1. POST to `/runs` with `{ "adapter": "<name>", "input": "<path>" }` to get a run ID.
-> 2. Poll `/runs/:id/events` every 1-2 seconds to monitor progress, warnings, errors, and convergence.
-> 3. If the run takes too long or diverges, POST to `/runs/:id/cancel`.
-> 4. When done, GET `/runs/:id/log?tail=100` for the final output.
-> 
-> Available adapters: `generic`, `python`, `opensees`, `calculix`, `fenics_python`.
-> Only the `generic` and `python` adapters were tested in this environment; others are provided as templates for solvers you may have installed.
-> 
-> The workspace root is set by `PIEZO_ROOT`; all `cwd` and input paths must be inside it.
-> No SDK or MCP server is needed: use plain HTTP or the JavaScript API (`import { runJob } from "piezo"`).
+- Job working directories are isolated under `<root>/runs/<job_id>`; artifact downloads reject traversal attempts (404) and unknown adapters are rejected with `400`. Solvers are spawned without a shell, restricted to the adapter's executable/argument allow-list.
+- Adapters declare an allow-list of executables; extra arguments are matched against it — never through a shell (`spawn`, not `shell:true`).
+- Logs are secret-redacted (tokens/keys patterns) before storage and streaming.
+- Prefer `/wait` for short jobs, `?format=ndjson` streams for long jobs, `/events` for convergence decisions.

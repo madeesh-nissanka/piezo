@@ -1,118 +1,143 @@
-# Piezo: A Protocol-Free Gateway for Agent-Driven Engineering Solvers with Live Log Telemetry
+# Piezo v0.3.0 — MIT License — Copyright (c) Madeesh P. Nissanka
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23274734.svg)](https://doi.org/10.5281/zenodo.23274734)
+Piezo is a protocol-free gateway for agent-driven engineering solvers with live
+log telemetry. Any agent or script that speaks plain HTTP (or stdio MCP) can
+submit, monitor and control numerical solver jobs — OpenSees, CalculiX, FEniCS,
+OpenFOAM, Code_Aster, Gmsh, SU2, LAMMPS or any CLI executable — while streaming
+structured logs, parsed events and metric series in real time.
 
-Piezo is a small gateway that lets an LLM agent (or any script) launch a command-line numerical solver, watch its log as structured events while it runs, and stop it, over plain local HTTP or a JavaScript API, with no MCP server and no SDK.
+Zero runtime dependencies. Node 18+ (uses only `node:` builtins). MIT license.
 
-## Abstract
+**Status**: early-stage, v0.3.x. The API may evolve before 1.0.
 
-Piezo provides a minimal, zero-dependency bridge between agent-style workflows and command-line engineering solvers (OpenSees, CalculiX, Code_Aster, FEniCS scripts, etc.). It spawns the solver as a child process, captures stdout/stderr line by line, applies adapter-defined regex patterns to emit structured events (progress, warning, error, converged), and exposes everything via a localhost-only HTTP server or a direct JavaScript `runJob()` call. A verification ledger records every run for auditability.
-
-## Install
-
-```bash
-# Requires Node.js 18+
-git clone https://github.com/madeesh-nissanka/piezo.git
-cd piezo
-# No npm install needed: zero dependencies
-```
-
-## Quick Start
+## Quick start
 
 ```bash
-# Terminal 1: Start the server
-export PIEZO_PORT=7421
-export PIEZO_ROOT=/path/to/workspace
-node bin/piezo.js serve
+# 1. Start the server (binds 127.0.0.1:7421 by default)
+PIEZO_ROOT=/srv/piezo PIEZO_PORT=7421 node bin/piezo.js serve
+#   optional bearer auth: PIEZO_TOKEN=secret ...  (then send Authorization: Bearer secret)
 
-# Terminal 2: Run a job via HTTP
-curl -X POST http://127.0.0.1:7421/runs \
+# 2. Submit a job. `input` is handed to the solver verbatim; the solver's
+#    working directory is the isolated run dir <root>/runs/<job_id>.
+curl -X POST http://127.0.0.1:7421/jobs \
   -H "Content-Type: application/json" \
-  -d '{"adapter": "python", "input": "examples/fake_solver.py --steps 5 --sleep 0.01"}'
+  -d '{"adapter":"python_script","input":"/srv/piezo/inputs/consolidation.py","timeout_s":300,"priority":7}'
+# -> 201 {"id":"job_...","status":"queued","spec":{...},"attempts":0,"createdAt":...}
 
-# Or run directly via JavaScript (no server needed)
-node -e "
-import { runJob } from './src/index.js';
-const result = await runJob({
-  adapter: { name: 'test', executable: 'python3', args_template: ['examples/fake_solver.py', '--steps', '5'], allowed_executables: ['python3'], patterns: [] },
-  input: '',
-  workspaceRoot: '.',
-});
-console.log(result);
-"
+# 3. Watch it live
+curl -N  "http://127.0.0.1:7421/jobs/$ID/stream?format=sse"        # Server-Sent Events
+curl -N  "http://127.0.0.1:7421/jobs/$ID/stream?format=ndjson&from=0"  # NDJSON w/ replay
+curl -s  "http://127.0.0.1:7421/jobs/$ID/events?since=0"           # parsed events
+curl -s  "http://127.0.0.1:7421/jobs/$ID/metrics"                  # rolling metrics + ETA
+curl -s  "http://127.0.0.1:7421/jobs/$ID/wait?timeout_ms=30000"    # long-poll
+
+# 4. Results
+curl -s http://127.0.0.1:7421/jobs/$ID/summary
+curl -s http://127.0.0.1:7421/jobs/$ID/manifest      # provenance
+curl -s http://127.0.0.1:7421/jobs/$ID/artifacts
+curl -s -o out.vtk http://127.0.0.1:7421/jobs/$ID/artifacts/results/out.vtk
 ```
 
-## Architecture
+No solver installed? Use the bundled fake solver:
+`node bin/piezo.js run python_script <(echo 'import sys;print("step 1 residual 1e-3")')` — or see
+`fixtures/fake_solver.py` / `fixtures/fake_solver.js` and `test/smoke.test.js`
+for complete runnable examples.
 
-- **`src/runner.js`**: Spawns solver with `child_process.spawn` (never shell), captures output line by line, writes combined log to `runs/<id>/log.txt`, keeps last N lines in a ring buffer, supports timeout and cancel (SIGTERM → SIGKILL after 5s, kills process group).
-- **`src/adapters.js`**: Adapter = JSON file defining executable, argument template with `{input}` placeholder, allow-list of executables, and regex patterns for progress/warning/error/converged events.
-- **`src/parser.js`**: Applies adapter patterns to each log line, emits events with timestamps and extracted fields, maintains running summary (last progress, warning/error counts, converged flag).
-- **`src/server.js`**: Node `http` server bound to `127.0.0.1` only. Optional bearer token auth via `PIEZO_TOKEN`. JSON endpoints for run management. Workspace root enforced via `PIEZO_ROOT`.
-- **`src/index.js`**: Exports `runJob`, `loadAdapter`, `Parser`, `startServer`.
-- **`bin/piezo.js`**: CLI: `piezo serve`, `piezo run <adapter.json> <input> [--timeout 60]`, `piezo status <id>`.
+## HTTP API
 
-## Adapters
+OpenAPI 3.0.3 document served at `GET /openapi.json` (single source of truth;
+routes and schemas are checked by the offline test suite).
 
-Built-in adapters (in `adapters/`):
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/health` | status + job counters |
+| GET | `/adapters` · `/adapters/:name` | list / full definition |
+| POST | `/adapters/validate` | validate adapter JSON |
+| POST | `/jobs` | submit (`adapter`, `input`, `extra_args`, `priority` 0–10, `timeout_s`, `retries`) → 201 |
+| GET | `/jobs` | paginated (`limit`,`offset` → `items,total,next_offset`; `status`, `study_id` filters) |
+| GET | `/jobs/:id` | job record (`queued/running/succeeded/failed/cancelled/timeout`) |
+| POST | `/jobs/:id/cancel` | graceful, then forced |
+| GET | `/jobs/:id/log?since=&tail=` · `/events?since=` · `/metrics` | telemetry |
+| GET | `/jobs/:id/stream?format=sse\|ndjson&from=` · `/wait?timeout_ms=` | streaming / long-poll |
+| GET | `/jobs/:id/manifest` · `/artifacts` · `/artifacts/:file` · `/summary` | results |
+| POST | `/studies` · GET `/studies/:id` · `/studies/:id/export?format=csv\|json` | parameter studies |
+| GET | `/` | static web dashboard |
 
-| Adapter | Executable | Args Template | Tested |
-|---------|------------|---------------|--------|
-| generic | `echo` | `["{input}"]` | Yes (via fake_solver) |
-| python | `python3` | `["{input}"]` | Yes (via fake_solver) |
-| opensees | `OpenSees` | `["{input}"]` | No (solver not installed) |
-| calculix | `ccx` | `["-i", "{input}"]` | No (solver not installed) |
-| fenics_python | `python3` | `["{input}"]` | No (solver not installed) |
+Errors are always `{ "error": { "code", "message", "request_id" } }` with a
+matching HTTP status. If `PIEZO_TOKEN` is set, missing/bad tokens get `401`.
 
-Only the `generic` and `python` adapters were tested in this environment (via `examples/fake_solver.py`). The others are provided as templates for solvers you may have installed. Check with `which OpenSees ccx`: none were found.
+## Parameter studies
 
-## Example: Fake Solver
+`POST /studies` with a `template` (a normal job body) and a `plan`:
+`{"type":"grid","factors":{"load":[100,200]}}`, `{"type":"sweep","factor":"x","values":[1,2]}`, or
+`{"type":"lhs","factors":{"x":{"min":0,"max":1,"n":8}},"seed":42}`.
+Placeholders `{name}` in `input`/`extra_args` are replaced per cell.
+Export as CSV/JSON via `/studies/:id/export`.
 
-`examples/fake_solver.py` simulates a solver:
+## MCP server
+
+`node bin/piezo.js mcp` speaks Model Context Protocol over stdio (JSON-RPC)
+and exposes tools: `list_adapters`, `submit_job`, `job_status`, `tail_log`,
+`cancel_job`, `get_artifacts`.
+
+## CLI
+
+```
+piezo serve                     # env: PIEZO_PORT/PIEZO_TOKEN/PIEZO_ROOT (host is fixed to 127.0.0.1)
+piezo run <adapter> <input> [--timeout S] [--json]
+piezo submit <adapter> <input> [--priority N] [--timeout S] [--retries N] [--backoff MS] [--extra-ARGS]
+piezo status <id> [--json]
+piezo tail <id> [--since N] [--tail N]
+piezo cancel <id>
+piezo adapters validate <file.json>
+piezo mcp
+piezo --version | --about
+```
+
+Exit codes: 0 ok, 1 error, 2 usage, 3 not found, 4 unauthorized, 5 server unreachable.
+
+## Solvers and adapters
+
+Twelve JSON adapters ship in `adapters/`: `calculix`, `code_aster`,
+`fenics_python`, `generic`, `generic_cli`, `gmsh`, `lammps`, `openfoam`,
+`opensees`, `python`, `python_script`, `su2`. Adapters are pure configuration
+(executable, argument template, log regex packs, artifact globs, version probe);
+write your own with `src/adapter_sdk.js` and check it with
+`piezo adapters validate my.json`. Example topics in docs are textbook-level and
+synthetic; solvers themselves are not bundled.
+
+## Security model
+
+- Binds `127.0.0.1` by default; optional bearer token.
+- Solvers are spawned with `spawn()` (no shell) and restricted to the adapter's
+  executable/argument allow-list; extra args are validated.
+- Job working directories are isolated under `<root>/runs/<job_id>`;
+  artifact download rejects path traversal.
+- Request bodies are size-limited; log lines are secret-redacted before storage.
+
+## Development
+
 ```bash
-python3 examples/fake_solver.py --steps 30 --sleep 0.1
-# Prints: step 1 residual 3.2e-04 ... step 15 WARNING: line search backtracked ... Converged in 30 steps
-
-python3 examples/fake_solver.py --fail --steps 5
-# Prints: step 1 ... step 5 ERROR: singular matrix (exit 1)
+node --test test/          # 408 offline tests, no network, no solvers needed
+npm run smoke              # end-to-end smoke against real child processes
 ```
 
-## Agent Usage
+CI workflow: `ci/github-actions-ci.yml` (Node 18/20/22 matrix).
+See `CONTRIBUTING.md`, `docs/AGENT_USAGE.md`, `docs/SECURITY.md`,
+`docs/PLATFORMS.md`, `docs/ADAPTER_SDK.md`, `CHANGELOG.md`, `CITATION.cff`.
 
-See `docs/AGENT_USAGE.md` for the exact HTTP calls, a complete agent session transcript, and a system-prompt snippet.
+## Known limits (honest)
 
-## Validation
+- Single-process, in-memory queue; checkpoints enable resume after restart, but
+  there is no distributed mode or persistence layer.
+- Resource limits: memory cap via periodic polling on Linux only; no cgroups.
+- A `manifest.json` is written into each run dir at finish and also served on
+  request; hashes cover the input and any files under `artifacts/`.
+- Load/soak numbers are not benchmarked for this release; the suite measures
+  correctness, and the smoke test runs real child processes end-to-end.
+- No HTTPS (put a TLS terminator in front, bind localhost), no multi-user ACLs.
 
-Run tests with Node's built-in test runner:
+## Citation & license
 
-```bash
-node --test tests/piezo.test.js
-```
-
-Tests cover:
-- Adapter allow-list rejection
-- Placeholder substitution
-- Parser pattern matching (progress, warning, error, converged)
-- Full fake solver run (32 events: 30 progress, 1 warning, 1 converged; summary reports the last step and residual)
-- Line counting (each output line counted once)
-- Failing solver (exit code 1, error event)
-- Timeout kill (fake solver with `--sleep 30` and timeout 2 ends within 8s, marked `timed_out`)
-- Cancel
-- Path traversal rejection
-- Localhost-only bind
-- Bearer token auth
-
-## Limitations
-
-- Only tested with the bundled `fake_solver.py`. Real solvers (OpenSees, CalculiX, FEniCS) were not available in the test environment.
-- No Windows support (uses `process.kill(-pid)` for process groups).
-- Events are kept in memory per run and are lost when the server stops; only the raw log is written to disk (`runs/<id>/log.txt`).
-- Adapter regular expressions are written by the user; the bundled `python` and `fenics_python` adapters recognise the demo solver's `step N residual X` lines, `warning` (case-insensitive), `Error`/`Traceback`, and `Converged`. Real solvers need their own patterns.
-- No persistent storage: runs kept in memory, logs on disk.
-
-## How to Cite
-
-See `CITATION.cff`.
-
-## Licence
-
-MIT. See `LICENSE`.
+MIT © Madeesh P. Nissanka. If you use Piezo in research, please cite
+`CITATION.cff`.

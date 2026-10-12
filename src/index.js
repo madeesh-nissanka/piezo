@@ -1,3 +1,4 @@
+// Piezo v0.3.0 - MIT License - Copyright (c) Madeesh P. Nissanka
 /**
  * Piezo - Main entry point
  */

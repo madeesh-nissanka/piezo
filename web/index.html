@@ -1,0 +1,328 @@
+<!-- Piezo v0.3.0 - MIT License - Copyright (c) Madeesh P. Nissanka -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piezo Dashboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; background: #1a1a2e; color: #eaeaea; line-height: 1.5; }
+header { background: #16213e; border-bottom: 1px solid #0f3460; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+header h1 { font-size: 1.4rem; font-weight: 600; color: #e94560; }
+.counts { display: flex; gap: 16px; font-size: 0.85rem; }
+.count { display: flex; align-items: center; gap: 6px; }
+.count .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600; }
+.badge-queued { background: #3a86ff; color: #fff; }
+.badge-running { background: #ffbe0b; color: #1a1a2e; }
+.badge-succeeded { background: #2ec4b6; color: #1a1a2e; }
+.badge-failed { background: #e94560; color: #fff; }
+.badge-cancelled { background: #6c757d; color: #fff; }
+.badge-timeout { background: #a855f7; color: #fff; }
+.badge-total { background: #0f3460; color: #eaeaea; }
+main { display: grid; grid-template-columns: 1fr 420px; gap: 0; height: calc(100vh - 68px); }
+.panel { background: #16213e; border-right: 1px solid #0f3460; display: flex; flex-direction: column; }
+.panel-header { padding: 12px 16px; border-bottom: 1px solid #0f3460; font-weight: 600; font-size: 0.9rem; }
+.table-wrap { overflow: auto; flex: 1; }
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #0f3460; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+th { background: #1a1a2e; color: #8892b0; font-weight: 500; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+tr:hover { background: #1f4068; }
+tr.selected { background: #0f3460; }
+td.id { font-family: monospace; max-width: 80px; }
+td.input { max-width: 180px; }
+td.started { font-family: monospace; color: #8892b0; max-width: 140px; }
+.detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.detail-header { padding: 12px 16px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+.detail-title { font-weight: 600; font-size: 0.9rem; }
+.detail-actions { display: flex; gap: 8px; }
+.btn { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 500; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.85; }
+.btn-cancel { background: #e94560; color: #fff; }
+.btn-replay { background: #3a86ff; color: #fff; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.section { flex: 1; overflow: auto; padding: 12px 16px; }
+.section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: #8892b0; margin-bottom: 8px; }
+.log-area { font-family: monospace; font-size: 0.75rem; line-height: 1.6; background: #0f0f1a; border-radius: 4px; padding: 10px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.log-line { margin: 2px 0; }
+.log-stdout { color: #2ec4b6; }
+.log-stderr { color: #e94560; }
+.metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+.metric-card { background: #0f0f1a; border-radius: 4px; padding: 10px; }
+.metric-label { font-size: 0.65rem; text-transform: uppercase; color: #8892b0; margin-bottom: 4px; }
+.metric-value { font-family: monospace; font-size: 1.1rem; font-weight: 600; color: #eaeaea; }
+.sparkline { width: 100%; height: 120px; background: #0f0f1a; border-radius: 4px; }
+.error { color: #e94560; font-size: 0.8rem; padding: 8px; background: rgba(233,69,96,0.1); border-radius: 4px; margin-bottom: 8px; }
+.empty { color: #8892b0; text-align: center; padding: 40px 0; font-size: 0.85rem; }
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  .panel { border-right: none; border-bottom: 1px solid #0f3460; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Piezo</h1>
+  <div class="counts" id="counts"></div>
+</header>
+<main>
+  <div class="panel">
+    <div class="panel-header">Jobs</div>
+    <div class="table-wrap">
+      <table id="jobTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Input</th>
+            <th>Exit</th>
+            <th>Started</th>
+          </tr>
+        </thead>
+        <tbody id="jobBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel detail" id="detail">
+    <div class="detail-header">
+      <span class="detail-title" id="detailTitle">Select a job</span>
+      <div class="detail-actions">
+        <button class="btn btn-replay" id="btnReplay" disabled>Replay from start</button>
+        <button class="btn btn-cancel" id="btnCancel" disabled>Cancel</button>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Live Log</div>
+      <div class="log-area" id="logArea"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Metrics</div>
+      <div class="metrics-grid" id="metricsGrid"></div>
+      <canvas class="sparkline" id="sparkline" width="400" height="120"></canvas>
+    </div>
+  </div>
+</main>
+<script>
+(function() {
+  const API = '';
+  let selectedJobId = null;
+  let eventSource = null;
+  let metricsHistory = [];
+  let logLineCount = 0;
+
+  function safeFetch(url, options = {}) {
+    return fetch(API + url, options)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .catch(e => ({ _error: e.message }));
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '-';
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  }
+
+  function shortId(id) {
+    return id.slice(0, 8);
+  }
+
+  function statusBadge(status) {
+    const map = {
+      queued: 'badge-queued',
+      running: 'badge-running',
+      succeeded: 'badge-succeeded',
+      failed: 'badge-failed',
+      cancelled: 'badge-cancelled',
+      timeout: 'badge-timeout'
+    };
+    return `<span class="badge ${map[status] || 'badge-total'}">${status}</span>`;
+  }
+
+  async function loadHealth() {
+    const data = await safeFetch('/health');
+    if (data._error) {
+      document.getElementById('counts').innerHTML = `<span class="error">${data._error}</span>`;
+      return;
+    }
+    const j = data.jobs || {};
+    const html = `
+      <span class="count"><span class="badge badge-total">Total</span> ${j.total || 0}</span>
+      <span class="count"><span class="badge badge-queued">Queued</span> ${j.queued || 0}</span>
+      <span class="count"><span class="badge badge-running">Running</span> ${j.running || 0}</span>
+      <span class="count"><span class="badge badge-succeeded">Succeeded</span> ${j.finished || 0}</span>
+    `;
+    document.getElementById('counts').innerHTML = html;
+  }
+
+  async function loadJobs() {
+    const data = await safeFetch('/jobs?limit=100');
+    const tbody = document.getElementById('jobBody');
+    if (data._error) {
+      tbody.innerHTML = `<tr><td colspan="5" class="error">${data._error}</td></tr>`;
+      return;
+    }
+    const items = data.items || [];
+    if (items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty">No jobs</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(job => `
+      <tr data-id="${job.id}" class="${job.id === selectedJobId ? 'selected' : ''}">
+        <td class="id">${shortId(job.id)}</td>
+        <td>${statusBadge(job.status)}</td>
+        <td class="input">${job.spec?.input || '-'}</td>
+        <td>${job.exitCode !== undefined && job.exitCode !== null ? job.exitCode : '-'}</td>
+        <td class="started">${formatTime(job.startedAt)}</td>
+      </tr>
+    `).join('');
+    tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.addEventListener('click', () => selectJob(tr.dataset.id));
+    });
+  }
+
+  function selectJob(id) {
+    selectedJobId = id;
+    document.querySelectorAll('#jobBody tr').forEach(tr => {
+      tr.classList.toggle('selected', tr.dataset.id === id);
+    });
+    document.getElementById('detailTitle').textContent = `Job ${shortId(id)}`;
+    document.getElementById('btnCancel').disabled = false;
+    document.getElementById('btnReplay').disabled = false;
+    openLogStream(id);
+    startMetricsPoll(id);
+  }
+
+  function openLogStream(id) {
+    if (eventSource) {
+      eventSource.close();
+    }
+    document.getElementById('logArea').textContent = '';
+    logLineCount = 0;
+    eventSource = new EventSource(`/jobs/${id}/stream?format=sse&from=0`);
+    eventSource.onmessage = e => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.line_no !== undefined && data.text !== undefined) {
+          appendLogLine(data);
+        }
+      } catch (_) {}
+    };
+    eventSource.addEventListener('log', e => {
+      try {
+        const data = JSON.parse(e.data);
+        appendLogLine(data);
+      } catch (_) {}
+    });
+    eventSource.addEventListener('job', e => {
+      try {
+        const job = JSON.parse(e.data);
+        updateJobStatus(job);
+      } catch (_) {}
+    });
+    eventSource.onerror = () => {
+      appendLogLine({ stream: 'stderr', text: '[EventSource disconnected]' });
+    };
+  }
+
+  function appendLogLine(data) {
+    const area = document.getElementById('logArea');
+    const div = document.createElement('div');
+    div.className = `log-line log-${data.stream || 'stdout'}`;
+    div.textContent = data.text;
+    area.appendChild(div);
+    area.scrollTop = area.scrollHeight;
+    logLineCount++;
+  }
+
+  function updateJobStatus(job) {
+    const badge = document.querySelector(`#jobBody tr[data-id="${job.id}"] td:nth-child(2)`);
+    if (badge) badge.innerHTML = statusBadge(job.status);
+    const exitTd = document.querySelector(`#jobBody tr[data-id="${job.id}"] td:nth-child(4)`);
+    if (exitTd && job.exitCode !== undefined && job.exitCode !== null) exitTd.textContent = job.exitCode;
+    const startedTd = document.querySelector(`#jobBody tr[data-id="${job.id}"] td:nth-child(5)`);
+    if (startedTd && job.startedAt) startedTd.textContent = formatTime(job.startedAt);
+  }
+
+  async function loadMetrics(id) {
+    const data = await safeFetch(`/jobs/${id}/metrics`);
+    const grid = document.getElementById('metricsGrid');
+    if (data._error) {
+      grid.innerHTML = `<div class="error" style="grid-column:1/-1">${data._error}</div>`;
+      return;
+    }
+    if (!data.last || Object.keys(data.last).length === 0) {
+      grid.innerHTML = `<div class="empty" style="grid-column:1/-1">no metrics</div>`;
+      return;
+    }
+    const entries = Object.entries(data.last).slice(0, 4);
+    grid.innerHTML = entries.map(([k, v]) => `
+      <div class="metric-card">
+        <div class="metric-label">${k}</div>
+        <div class="metric-value">${typeof v === 'number' ? v.toFixed(6) : v}</div>
+      </div>
+    `).join('');
+    if (data.last.residual !== undefined) {
+      metricsHistory.push(data.last.residual);
+      if (metricsHistory.length > 200) metricsHistory.shift();
+      drawSparkline();
+    }
+  }
+
+  function drawSparkline() {
+    const canvas = document.getElementById('sparkline');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.clientWidth;
+    const h = canvas.height = 120;
+    ctx.clearRect(0, 0, w, h);
+    if (metricsHistory.length < 2) return;
+    const min = Math.min(...metricsHistory);
+    const max = Math.max(...metricsHistory);
+    const range = max - min || 1;
+    ctx.strokeStyle = '#2ec4b6';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    metricsHistory.forEach((v, i) => {
+      const x = (i / (metricsHistory.length - 1)) * w;
+      const y = h - ((v - min) / range) * (h - 10) - 5;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  function startMetricsPoll(id) {
+    if (window._metricsInterval) clearInterval(window._metricsInterval);
+    metricsHistory = [];
+    loadMetrics(id);
+    window._metricsInterval = setInterval(() => loadMetrics(id), 1000);
+  }
+
+  async function cancelJob(id) {
+    const res = await safeFetch(`/jobs/${id}/cancel`, { method: 'POST' });
+    if (res._error) alert(res._error);
+    else loadJobs();
+  }
+
+  document.getElementById('btnCancel').addEventListener('click', () => {
+    if (selectedJobId) cancelJob(selectedJobId);
+  });
+
+  document.getElementById('btnReplay').addEventListener('click', () => {
+    if (selectedJobId) openLogStream(selectedJobId);
+  });
+
+  async function init() {
+    await loadHealth();
+    await loadJobs();
+    setInterval(loadHealth, 2000);
+    setInterval(loadJobs, 2000);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

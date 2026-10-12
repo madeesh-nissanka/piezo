@@ -1,3 +1,4 @@
+// Piezo v0.3.0 - MIT License - Copyright (c) Madeesh P. Nissanka
 /**
  * Piezo Runner - Process management with live log capture
  */
@@ -6,20 +7,27 @@ import { EventEmitter } from "node:events";
 import { createWriteStream, mkdirSync, existsSync } from "node:fs";
 import { join, resolve, relative, isAbsolute } from "node:path";
 import { Parser } from "./parser.js";
+import { redact, defaultSecrets, assertJobInput, inputDirsFor } from "./security.js";
 
 export class Runner extends EventEmitter {
   constructor(options = {}) {
     super();
     this.adapter = options.adapter;
     this.input = options.input;
+    /** Effective argv token for {input}; defaults to `input` (manager may stage a copy). */
+    this.effectiveInput = options.effectiveInput || options.input;
     this.extraArgs = options.extraArgs || [];
     this.cwd = options.cwd || process.cwd();
     this.timeoutMs = (options.timeout_s || 0) * 1000;
     this.maxLogLines = options.maxLogLines || 2000;
     this.workspaceRoot = resolve(options.workspaceRoot || process.cwd());
+    this.inputDirs = options.inputDirs || inputDirsFor(this.workspaceRoot);
+    this.secrets = options.secrets || defaultSecrets();
+    /** Extra environment variables merged over process.env for the child. */
+    this.env = options.env || null;
 
     this.id = this.generateId();
-    this.runDir = join(this.workspaceRoot, "runs", this.id);
+    this.runDir = options.runDir ? resolve(options.runDir) : join(this.workspaceRoot, "runs", this.id);
     this.logPath = join(this.runDir, "log.txt");
     this.startTime = null;
     this.endTime = null;
@@ -63,7 +71,7 @@ export class Runner extends EventEmitter {
     const args = [];
     for (const arg of template) {
       if (arg === "{input}") {
-        args.push(this.input);
+        args.push(this.effectiveInput);
       } else {
         args.push(arg);
       }
@@ -72,18 +80,34 @@ export class Runner extends EventEmitter {
     return args;
   }
 
+  /**
+   * Defensive re-check of the documented input rule (see src/security.js).
+   * The JobManager enforces it at submit time; this protects callers that use
+   * the Runner directly.
+   */
+  validateInput() {
+    assertJobInput(this.input, {
+      root: this.workspaceRoot,
+      runDir: this.runDir,
+      extraDirs: this.inputDirs,
+    });
+  }
+
   async start() {
     this.validateCwd();
     this.validateExecutable();
+    this.validateInput();
 
     mkdirSync(this.runDir, { recursive: true });
     this.logStream = createWriteStream(this.logPath, { flags: "a" });
 
     const args = this.buildArgs();
+    const spawnEnv = this.env ? { ...process.env, ...this.env } : process.env;
     this.process = spawn(this.adapter.executable, args, {
       cwd: this.cwd,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
+      env: spawnEnv,
     });
 
     this.startTime = Date.now();
@@ -124,13 +148,16 @@ export class Runner extends EventEmitter {
     for (const raw of lines) {
       const fullLine = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
       this.lineCount++;
-      this.logBuffer.push({ lineNo: this.lineCount, text: fullLine, stream });
+      // Redact secrets from the line for storage and buffer
+      const redactedLine = redact(fullLine, this.secrets);
+      this.logBuffer.push({ lineNo: this.lineCount, text: redactedLine, stream });
       if (this.logBuffer.length > this.maxLogLines) {
         this.logBuffer.shift();
       }
-      this.logStream.write(fullLine + "\n");
+      this.logStream.write(redactedLine + "\n");
+      // Parse events from the original (unredacted) line so patterns still match
       for (const ev of this.parser.parseLine(this.lineCount, fullLine)) this.events.push(ev);
-      this.emit("line", { lineNo: this.lineCount, text: fullLine, stream });
+      this.emit("line", { lineNo: this.lineCount, text: redactedLine, stream });
     }
   }
 

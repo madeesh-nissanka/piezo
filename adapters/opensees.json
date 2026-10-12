@@ -1,10 +1,25 @@
 {
+  "_header": "Piezo v0.3.0 - MIT License - Copyright (c) Madeesh P. Nissanka",
   "name": "opensees",
   "executable": "OpenSees",
   "args_template": ["{input}"],
   "allowed_executables": ["OpenSees", "opensees"],
+  "version_probe": ["-version"],
+  "timeout_s": 7200,
   "patterns": [
-    {"name": "warning", "regex": "Warning", "type": "warning"},
-    {"name": "error", "regex": "Error|ERROR", "type": "error"}
+    {"name": "progress", "regex": "step\\s+(?<step>\\d+)\\s+norm\\s+(?<residual>[0-9.eE+\\-]+)", "type": "progress", "fields": ["step", "residual"]},
+    {"name": "iteration", "regex": "iteration\\s+(?<iteration>\\d+)\\s+norm\\s+(?<residual>[0-9.eE+\\-]+)", "type": "iteration", "fields": ["iteration", "residual"]},
+    {"name": "iteration_residual", "regex": "(?:iteration|iter)\\s+(?<iteration>\\d+)\\s+(?:residual|norm|normInf)\\s*[:=]?\\s*(?<residual>[0-9.eE+\\-]+)", "flags": "i", "type": "iteration", "fields": ["iteration", "residual"]},
+    {"name": "iteration_simple", "regex": "iteration\\s+(?<iteration>\\d+)", "flags": "i", "type": "iteration", "fields": ["iteration"]},
+    {"name": "warning", "regex": "WARNING|Warning|warning", "type": "warning", "severity": "warn"},
+    {"name": "error", "regex": "ERROR|Error|error|Segmentation fault|FATAL", "type": "error", "severity": "error"},
+    {"name": "converged", "regex": "converged|Converged|CONVERGED|solution converged|convergence achieved", "type": "converged"},
+    {"name": "diverged", "regex": "diverged|Diverged|DIVERGED|divergence detected|not converged|failed to converge", "type": "diverged"},
+    {"name": "elapsed", "regex": "elapsed time\\s*[:=]?\\s*(?<elapsed_s>\\d+(?:\\.\\d+)?)", "type": "info", "fields": ["elapsed_s"]},
+    {"name": "progress_pct", "regex": "progress\\s*[:=]?\\s*(?<progress_pct>\\d+(?:\\.\\d+)?)%", "type": "progress", "fields": ["progress_pct"]},
+    {"name": "progress_alt", "regex": "progress\\s*[:=]\\s*(?<progress_pct>\\d+(?:\\.\\d+)?)\\s*%", "type": "progress", "fields": ["progress_pct"]},
+    {"name": "progress_bracket", "regex": "\\[(?<progress_pct>\\d+(?:\\.\\d+)?)%\\]", "type": "progress", "fields": ["progress_pct"]},
+    {"name": "eta", "regex": "(?:eta|remaining time)\\s*[:=]?\\s*(?<eta_s>\\d+(?:\\.\\d+)?)\\s*s", "flags": "i", "type": "info", "fields": ["eta_s"]},
+    {"name": "eta_hms", "regex": "eta\\s*[:=]?\\s*(?<eta_s>\\d+:\\d+:\\d+)", "flags": "i", "type": "info", "fields": ["eta_s"]}
   ]
 }
