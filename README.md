@@ -1,5 +1,7 @@
 # Piezo v0.3.1 — MIT License — Copyright (c) Madeesh P. Nissanka
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23274734.svg)](https://doi.org/10.5281/zenodo.23274734)
+
 Piezo is a protocol-free gateway for agent-driven engineering solvers with live
 log telemetry. Any agent or script that speaks plain HTTP (or stdio MCP) can
 submit, monitor and control numerical solver jobs — OpenSees, CalculiX, FEniCS,
@@ -140,4 +142,6 @@ See `CONTRIBUTING.md`, `docs/AGENT_USAGE.md`, `docs/SECURITY.md`,
 ## Citation & license
 
 MIT © Madeesh P. Nissanka. If you use Piezo in research, please cite
-`CITATION.cff`.
+`CITATION.cff`. The archived releases are on Zenodo; the DOI
+[10.5281/zenodo.23274734](https://doi.org/10.5281/zenodo.23274734) always resolves
+to the latest version.

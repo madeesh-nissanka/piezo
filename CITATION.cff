@@ -7,5 +7,6 @@ authors:
 version: 0.3.1
 date-released: 2026-10-12
 license: MIT
+doi: 10.5281/zenodo.23274734
 type: software
 abstract: "Piezo is a zero-dependency HTTP gateway that lets AI agents execute CLI engineering solvers with live log telemetry. It provides a declarative adapter system, job management with priority queues, streaming log parsing, and multiple telemetry transports for real-time monitoring."
